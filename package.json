@@ -11,6 +11,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@google/genai": "^2.32.0",
     "grammy": "^1.30.0",
     "openai": "^7.52.0"
   },

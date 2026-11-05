@@ -1,31 +1,30 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY
+});
 
 const histories = new Map();
 
 const SYSTEM_PROMPT = `
 تو یک منشی هوشمند فارسی‌زبان هستی.
 به فارسی روان، محترمانه و طبیعی پاسخ بده.
-پاسخ‌ها دقیق، کاربردی و تا حد امکان مختصر باشند.
-اگر اطلاعات کافی نداری، سؤال روشن‌کننده بپرس.
-اطلاعات را جعل نکن.
+پاسخ‌ها دقیق و کاربردی باشند.
+اطلاعات جعل نکن.
 `;
 
 export function registerCommands(bot) {
   bot.command("start", async (ctx) => {
-    await ctx.reply("سلام! منشی هوشمندت آماده‌ام. هر چیزی خواستی بپرس.");
+    await ctx.reply("سلام! منشی هوشمندت با Gemini آماده است.");
   });
 
   bot.command("help", async (ctx) => {
-    await ctx.reply("پیامت را بفرست تا پاسخ بدهم.\nبرای پاک کردن حافظه گفت‌وگو: /reset");
+    await ctx.reply("پیامت را بفرست.\nبرای پاک کردن حافظه: /reset");
   });
 
   bot.command("reset", async (ctx) => {
     histories.delete(ctx.chat.id);
-    await ctx.reply("حافظه این گفت‌وگو پاک شد.");
+    await ctx.reply("حافظه گفت‌وگو پاک شد.");
   });
 
   bot.on("message:text", async (ctx) => {
@@ -34,8 +33,8 @@ export function registerCommands(bot) {
     const text = ctx.message.text;
     if (text.startsWith("/")) return;
 
-    if (!openai) {
-      await ctx.reply("کلید OpenAI تنظیم نشده است. لطفاً تنظیمات ربات را بررسی کن.");
+    if (!process.env.GEMINI_API_KEY) {
+      await ctx.reply("کلید Gemini تنظیم نشده است.");
       return;
     }
 
@@ -45,22 +44,19 @@ export function registerCommands(bot) {
     try {
       await ctx.replyWithChatAction("typing");
 
-      const response = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
           ...history,
-          { role: "user", content: text }
+          { role: "user", parts: [{ text: SYSTEM_PROMPT + "\n\n" + text }] }
         ]
       });
 
-      const answer =
-        response.choices[0]?.message?.content?.trim() ||
-        "متأسفم، نتوانستم پاسخ مناسبی تولید کنم.";
+      const answer = response.text || "پاسخی دریافت نشد.";
 
       history.push(
-        { role: "user", content: text },
-        { role: "assistant", content: answer }
+        { role: "user", parts: [{ text }] },
+        { role: "model", parts: [{ text: answer }] }
       );
 
       histories.set(chatId, history.slice(-12));
@@ -68,9 +64,12 @@ export function registerCommands(bot) {
       for (let i = 0; i < answer.length; i += 4000) {
         await ctx.reply(answer.slice(i, i + 4000));
       }
+
     } catch (error) {
-      console.error("OpenAI error:", error.message);
-      await ctx.reply("در ارتباط با هوش مصنوعی مشکلی پیش آمد. کمی بعد دوباره امتحان کن.");
+      console.error("Gemini error:", error.message);
+      await ctx.reply("در ارتباط با Gemini مشکلی پیش آمد.");
     }
   });
 }
+0
+
