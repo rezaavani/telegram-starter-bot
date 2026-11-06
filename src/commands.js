@@ -26,7 +26,7 @@ async function handleAI(ctx, text, historyKey) {
     await ctx.replyWithChatAction("typing");
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash-lite",
+      model: "gemini-2.5-flash",
       contents: [
         ...history,
         {
@@ -48,23 +48,27 @@ async function handleAI(ctx, text, historyKey) {
     for (let i = 0; i < answer.length; i += 4000) {
       await ctx.reply(answer.slice(i, i + 4000));
     }
+
   } catch (error) {
-    console.error("Gemini error:", error.message);
+    console.error("Gemini error:", error);
     await ctx.reply("در ارتباط با Gemini مشکلی پیش آمد.");
   }
 }
 
 export function registerCommands(bot) {
+
   bot.command("start", async (ctx) => {
     await ctx.reply("سلام! منشی هوشمندت با Gemini آماده است.");
   });
 
   bot.command("help", async (ctx) => {
-    await ctx.reply("پیامت را بفرست.\nبرای پاک کردن حافظه: /reset");
+    await ctx.reply(
+      "پیامت را بفرست.\nبرای پاک کردن حافظه: /reset"
+    );
   });
 
   bot.command("reset", async (ctx) => {
-    histories.delete(ctx.chat.id);
+    histories.delete(`bot:${ctx.chat.id}`);
     await ctx.reply("حافظه گفت‌وگو پاک شد.");
   });
 
@@ -78,16 +82,18 @@ export function registerCommands(bot) {
     await handleAI(ctx, text, `bot:${ctx.chat.id}`);
   });
 
-  // پیام‌های دایرکت اکانت Telegram Business
+  // پیام‌های دایرکت Telegram Business
   bot.on("business_message:text", async (ctx) => {
     try {
       const connection = await ctx.getBusinessConnection();
 
       // پیام‌های خود صاحب حساب را نادیده بگیر
-      if (ctx.from.id === connection.user.id) return;
+      if (ctx.from?.id === connection.user.id) return;
 
       // بررسی مجوز پاسخ‌گویی
-      if (!connection.rights?.can_reply) return;
+      if (!connection.is_enabled || !connection.rights?.can_reply) {
+        return;
+      }
 
       const text = ctx.businessMessage.text;
       if (text.startsWith("/")) return;
@@ -95,8 +101,9 @@ export function registerCommands(bot) {
       const key = `business:${ctx.businessConnectionId}:${ctx.chat.id}`;
 
       await handleAI(ctx, text, key);
+
     } catch (error) {
-      console.error("Business error:", error.message);
+      console.error("Business error:", error);
     }
   });
 }
