@@ -24,7 +24,7 @@ async function generateWithRetry(contents) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       return await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-3.6-flash",
         contents,
         config: {
           systemInstruction: SYSTEM_PROMPT
