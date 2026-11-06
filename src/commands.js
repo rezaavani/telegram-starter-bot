@@ -10,10 +10,49 @@ const histories = new Map();
 const SYSTEM_PROMPT = `
 تو یک منشی هوشمند فارسی‌زبان هستی.
 به فارسی روان، محترمانه و طبیعی پاسخ بده.
-پاسخ‌ها دقیق، کاربردی و تا حد امکان مختصر باشند.
+پاسخ‌ها دقیق و کاربردی باشند.
 اطلاعات جعل نکن.
 اگر جواب چیزی را نمی‌دانی، صادقانه بگو.
 `;
+
+const sleep = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+async function generateWithRetry(contents) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents,
+        config: {
+          systemInstruction: SYSTEM_PROMPT
+        }
+      });
+    } catch (error) {
+      lastError = error;
+
+      const status = error.status || error.code;
+
+      const temporaryError = [
+        429, 500, 502, 503, 504
+      ].includes(Number(status));
+
+      if (!temporaryError || attempt === 3) {
+        throw error;
+      }
+
+      console.log(
+        `Gemini retry ${attempt}/3 after error ${status}`
+      );
+
+      await sleep(attempt * 2000);
+    }
+  }
+
+  throw lastError;
+}
 
 async function handleAI(ctx, text, historyKey) {
   if (!process.env.GEMINI_API_KEY) {
@@ -26,21 +65,18 @@ async function handleAI(ctx, text, historyKey) {
   try {
     await ctx.replyWithChatAction("typing");
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: [
-        ...history,
-        {
-          role: "user",
-          parts: [{ text }]
-        }
-      ],
-      config: {
-        systemInstruction: SYSTEM_PROMPT
+    const contents = [
+      ...history,
+      {
+        role: "user",
+        parts: [{ text }]
       }
-    });
+    ];
 
-    const answer = response.text?.trim() || "پاسخی دریافت نشد.";
+    const response = await generateWithRetry(contents);
+
+    const answer =
+      response.text?.trim() || "پاسخی دریافت نشد.";
 
     history.push(
       { role: "user", parts: [{ text }] },
@@ -55,19 +91,32 @@ async function handleAI(ctx, text, historyKey) {
 
   } catch (error) {
     console.error("Gemini error:", error);
-    await ctx.reply("در حال حاضر در پاسخ‌گویی مشکلی پیش آمده. لطفاً دوباره امتحان کن.");
+
+    const status = Number(error.status || error.code);
+
+    if (status === 503 || status === 429) {
+      await ctx.reply(
+        "سرویس هوش مصنوعی فعلاً شلوغ است. لطفاً کمی بعد دوباره پیام بده."
+      );
+    } else {
+      await ctx.reply(
+        "در ارتباط با هوش مصنوعی مشکلی پیش آمد. لطفاً دوباره تلاش کن."
+      );
+    }
   }
 }
 
 export function registerCommands(bot) {
 
   bot.command("start", async (ctx) => {
-    await ctx.reply("سلام! منشی هوشمندت با هوش مصنوعی Gemini آماده است.");
+    await ctx.reply(
+      "سلام! منشی هوشمندت با Gemini آماده است."
+    );
   });
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      "پیامت را بفرست تا پاسخ بدهم.\nبرای پاک کردن حافظه گفت‌وگو: /reset"
+      "پیامت را بفرست.\nبرای پاک کردن حافظه: /reset"
     );
   });
 
@@ -92,11 +141,12 @@ export function registerCommands(bot) {
     try {
       const connection = await ctx.getBusinessConnection();
 
-      // پیام‌های صاحب حساب را نادیده بگیر
       if (ctx.from?.id === connection.user.id) return;
 
-      // بررسی مجوز پاسخ‌گویی
-      if (!connection.is_enabled || !connection.rights?.can_reply) {
+      if (
+        !connection.is_enabled ||
+        !connection.rights?.can_reply
+      ) {
         return;
       }
 
@@ -104,7 +154,8 @@ export function registerCommands(bot) {
 
       if (text.startsWith("/")) return;
 
-      const key = `business:${ctx.businessConnectionId}:${ctx.chat.id}`;
+      const key =
+        `business:${ctx.businessConnectionId}:${ctx.chat.id}`;
 
       await handleAI(ctx, text, key);
 
