@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
@@ -9,8 +10,9 @@ const histories = new Map();
 const SYSTEM_PROMPT = `
 تو یک منشی هوشمند فارسی‌زبان هستی.
 به فارسی روان، محترمانه و طبیعی پاسخ بده.
-پاسخ‌ها دقیق و کاربردی باشند.
+پاسخ‌ها دقیق، کاربردی و تا حد امکان مختصر باشند.
 اطلاعات جعل نکن.
+اگر جواب چیزی را نمی‌دانی، صادقانه بگو.
 `;
 
 async function handleAI(ctx, text, historyKey) {
@@ -30,12 +32,15 @@ async function handleAI(ctx, text, historyKey) {
         ...history,
         {
           role: "user",
-          parts: [{ text: SYSTEM_PROMPT + "\n\n" + text }]
+          parts: [{ text }]
         }
-      ]
+      ],
+      config: {
+        systemInstruction: SYSTEM_PROMPT
+      }
     });
 
-    const answer = response.text || "پاسخی دریافت نشد.";
+    const answer = response.text?.trim() || "پاسخی دریافت نشد.";
 
     history.push(
       { role: "user", parts: [{ text }] },
@@ -50,19 +55,19 @@ async function handleAI(ctx, text, historyKey) {
 
   } catch (error) {
     console.error("Gemini error:", error);
-    await ctx.reply("در ارتباط با Gemini مشکلی پیش آمد.");
+    await ctx.reply("در حال حاضر در پاسخ‌گویی مشکلی پیش آمده. لطفاً دوباره امتحان کن.");
   }
 }
 
 export function registerCommands(bot) {
 
   bot.command("start", async (ctx) => {
-    await ctx.reply("سلام! منشی هوشمندت با Gemini آماده است.");
+    await ctx.reply("سلام! منشی هوشمندت با هوش مصنوعی Gemini آماده است.");
   });
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      "پیامت را بفرست.\nبرای پاک کردن حافظه: /reset"
+      "پیامت را بفرست تا پاسخ بدهم.\nبرای پاک کردن حافظه گفت‌وگو: /reset"
     );
   });
 
@@ -71,11 +76,12 @@ export function registerCommands(bot) {
     await ctx.reply("حافظه گفت‌وگو پاک شد.");
   });
 
-  // پیام‌های معمولی ربات
+  // پیام‌های خصوصی ربات
   bot.on("message:text", async (ctx) => {
     if (ctx.chat.type !== "private") return;
 
     const text = ctx.message.text;
+
     if (text.startsWith("/")) return;
 
     await handleAI(ctx, text, `bot:${ctx.chat.id}`);
@@ -86,7 +92,7 @@ export function registerCommands(bot) {
     try {
       const connection = await ctx.getBusinessConnection();
 
-      // پیام‌های خود صاحب حساب را نادیده بگیر
+      // پیام‌های صاحب حساب را نادیده بگیر
       if (ctx.from?.id === connection.user.id) return;
 
       // بررسی مجوز پاسخ‌گویی
@@ -95,6 +101,7 @@ export function registerCommands(bot) {
       }
 
       const text = ctx.businessMessage.text;
+
       if (text.startsWith("/")) return;
 
       const key = `business:${ctx.businessConnectionId}:${ctx.chat.id}`;
@@ -106,3 +113,4 @@ export function registerCommands(bot) {
     }
   });
 }
+0
