@@ -1,4 +1,3 @@
-cat > src/commands.js <<'EOF'
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
@@ -107,5 +106,3 @@ export function registerCommands(bot) {
     }
   });
 }
-EOF
-0
